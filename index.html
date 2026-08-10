@@ -696,11 +696,10 @@ const Cabin = ({ flight, setFlight, cfg }) => {
   // the pointer either moves past a threshold or is released. This lets a
   // selected item still be dragged to another slot.
   const onDown = (e, item) => {
-    // NOTE: We deliberately do NOT call e.preventDefault() here. Per the
-    // Pointer Events spec, calling preventDefault on pointerdown suppresses
-    // the compatibility 'click' event on mouse pointers — which we RELY on
-    // for tap-to-edit. Text selection during drag is prevented via CSS
-    // (userSelect: 'none' on the SVG) instead.
+    // No preventDefault (that suppresses click) and no pointer capture (kept
+    // things fragile on some browsers). We just record where the pointer went
+    // down and let native event bubbling handle the rest. Text selection is
+    // already prevented via CSS (select-none / touchAction: none).
     e.stopPropagation();
     const pt = toSvgPt(e.clientX, e.clientY);
     pending.current = {
@@ -708,13 +707,9 @@ const Cabin = ({ flight, setFlight, cfg }) => {
       offsetX: pt.x - item.x,
       offsetY: pt.y - item.y,
       moved: false,
+      startX: e.clientX,
+      startY: e.clientY,
     };
-    // Capture on the SVG (which owns the move/up handlers) — more reliable on
-    // iOS Safari than capturing on the inner <g>.
-    try {
-      const svg = svgRef.current;
-      if (svg && svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
-    } catch {}
   };
 
   const onMove = (e) => {
