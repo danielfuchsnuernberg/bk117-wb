@@ -696,7 +696,12 @@ const Cabin = ({ flight, setFlight, cfg }) => {
   // the pointer either moves past a threshold or is released. This lets a
   // selected item still be dragged to another slot.
   const onDown = (e, item) => {
-    e.preventDefault(); e.stopPropagation();
+    // NOTE: We deliberately do NOT call e.preventDefault() here. Per the
+    // Pointer Events spec, calling preventDefault on pointerdown suppresses
+    // the compatibility 'click' event on mouse pointers — which we RELY on
+    // for tap-to-edit. Text selection during drag is prevented via CSS
+    // (userSelect: 'none' on the SVG) instead.
+    e.stopPropagation();
     const pt = toSvgPt(e.clientX, e.clientY);
     pending.current = {
       id: item.id,
@@ -928,6 +933,114 @@ const Cabin = ({ flight, setFlight, cfg }) => {
                       onRemove={() => remove(item.id)}/>
         ))}
       </svg>
+
+      {/* Seat editor popover — appears next to the SVG when a seat is selected.
+          Positioned above the seat if the seat is in the lower half of the
+          cabin, below the seat if it's in the upper half, so the seat stays
+          visible while editing. */}
+      {(() => {
+        if (!editId) return null;
+        const item = placed.find(p => p.id === editId);
+        if (!item) return null;
+        const isCrewItem = item.type === 'pilot' || item.type === 'copilot';
+        const isBagItem  = item.type === 'baggage';
+        const isStrItem  = item.type === 'stretcher';
+        const isHookItem = item.type === 'hook';
+        const canName = !isBagItem && !isHookItem;
+        // Convert SVG coords (0..200, 0..290) to container percentages.
+        const seatLeftPct = (item.x / 200) * 100;
+        const seatTopPct  = (item.y / 290) * 100;
+        // Place popover below the seat if the seat is in the upper half,
+        // otherwise above. This keeps the seat visible next to the popover.
+        const upperHalf = item.y < 145;
+        // Popover positions itself with `top` or `bottom` referring to the
+        // seat's centre plus/minus an offset in %-of-container.
+        const seatLabel =
+          item.type === 'pilot'   ? 'Pilot (P1)' :
+          item.type === 'copilot' ? 'Co-pilot (P2)' :
+          item.type === 'stretcher' ? 'Stretcher / Patient' :
+          item.type === 'baggage'   ? 'Baggage' :
+          item.type === 'hook'      ? 'External Load' :
+          item.slotId ? 'Pax ' + item.slotId.replace('pax_', '') : 'Item';
+        return (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '92%', maxWidth: '260px',
+              background: 'var(--bg-1)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '10px',
+              padding: '14px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+              zIndex: 20,
+              ...(upperHalf
+                ? { top: `${seatTopPct + 9}%`, bottom: 'auto' }
+                : { bottom: `${100 - seatTopPct + 9}%`, top: 'auto' }),
+            }}>
+            {/* Header: label + close X */}
+            <div className="flex items-center justify-between" style={{ marginBottom: '10px' }}>
+              <span className="efb-section" style={{ color: 'var(--text-0)' }}>{seatLabel}</span>
+              <button
+                onClick={() => setEditId(null)}
+                aria-label="Close"
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  padding: '4px', display: 'inline-flex', alignItems: 'center',
+                  color: 'var(--text-2)', borderRadius: '4px',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-0)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-2)'; }}>
+                <X size={16}/>
+              </button>
+            </div>
+            {/* Name (skipped for baggage / hook) */}
+            {canName && (
+              <div style={{ marginBottom: '10px' }}>
+                <div className="efb-label" style={{ marginBottom: '4px' }}>Name</div>
+                <input
+                  type="text"
+                  className="efb-input"
+                  value={item.name || ''}
+                  placeholder="Optional"
+                  onChange={(e) => update(item.id, { name: e.target.value })}
+                  style={{ width: '100%' }}
+                  autoFocus={!((parseFloat(item?.weight) || 0) > 0)}
+                />
+              </div>
+            )}
+            {/* Weight */}
+            <div style={{ marginBottom: '12px' }}>
+              <div className="efb-label" style={{ marginBottom: '4px' }}>Weight (kg)</div>
+              <input
+                type="number"
+                inputMode="decimal"
+                className="efb-input no-spinner"
+                value={item.weight === 0 || item.weight === '' ? '' : item.weight}
+                placeholder="0"
+                onChange={(e) => update(item.id, { weight: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                onFocus={(e) => e.target.select()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); setEditId(null); }
+                  if (e.key === 'Escape') { e.preventDefault(); setEditId(null); }
+                }}
+                style={{ width: '100%', fontFamily: 'var(--mono)' }}
+                autoFocus={canName ? false : true}
+              />
+            </div>
+            {/* Delete */}
+            <button
+              onClick={() => remove(item.id)}
+              className="efb-btn efb-btn-danger"
+              style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <Trash2 size={14}/> Remove
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -1013,122 +1126,36 @@ const PlacedItem = ({ item, isEdit, isDrag, onDown, onTap, onUpdate, onUpdateNam
           <line x1="-14" y1="-20" x2="14" y2="-20" stroke={colors.stroke} strokeWidth="0.3" strokeDasharray="1 1.5" opacity="0.5"/>
           <line x1="-14" y1="8" x2="14" y2="8" stroke={colors.stroke} strokeWidth="0.3" strokeDasharray="1 1.5" opacity="0.5"/>
           {/* Weight in middle */}
-          {!isEdit && (
-            <text y="-2" textAnchor="middle" className="efb-mono"
-                  fontSize="6" fill={colors.text} fontWeight="500">{filled ? w : '—'}</text>
-          )}
-          {!isEdit && (
-            <text y="6" textAnchor="middle" className="efb-mono"
-                  fontSize="3" fill={colors.text} letterSpacing="0.1em" opacity="0.7">KG</text>
-          )}
+          <text y="-2" textAnchor="middle" className="efb-mono"
+                fontSize="6" fill={colors.text} fontWeight="500">{filled ? w : '—'}</text>
+          <text y="6" textAnchor="middle" className="efb-mono"
+                fontSize="3" fill={colors.text} letterSpacing="0.1em" opacity="0.7">KG</text>
         </g>
       ) : isBag ? (
         <g>
           <rect x="-19" y="-10" width="38" height="20" rx="1.5"
                 fill={colors.fill}
                 stroke={colors.stroke} strokeWidth={isEdit ? 1.2 : 0.6}/>
-          {!isEdit && (
-            <>
-              <text y="0" textAnchor="middle" className="efb-mono"
-                    fontSize="5" fill={colors.text} fontWeight="500">{filled ? w : '—'}</text>
-              <text y="7" textAnchor="middle" className="efb-mono"
-                    fontSize="2.8" fill="var(--text-2)" letterSpacing="0.15em">BAG · KG</text>
-            </>
-          )}
+          <text y="0" textAnchor="middle" className="efb-mono"
+                fontSize="5" fill={colors.text} fontWeight="500">{filled ? w : '—'}</text>
+          <text y="7" textAnchor="middle" className="efb-mono"
+                fontSize="2.8" fill="var(--text-2)" letterSpacing="0.15em">BAG · KG</text>
         </g>
       ) : (
         <g>
           <rect x="-12" y="-12" width="24" height="24" rx="1.5"
                 fill={colors.fill}
                 stroke={colors.stroke} strokeWidth={isEdit ? 1.2 : 0.6}/>
-          {!isEdit && (
-            <>
-              <text y="0" textAnchor="middle" className="efb-mono"
-                    fontSize="5.5" fill={colors.text} fontWeight="500">
-                {filled ? w : '—'}
-              </text>
-              <text y="7" textAnchor="middle" className="efb-mono"
-                    fontSize="3" fill="var(--text-2)" letterSpacing="0.1em">{sublabel}</text>
-            </>
-          )}
+          <text y="0" textAnchor="middle" className="efb-mono"
+                fontSize="5.5" fill={colors.text} fontWeight="500">
+            {filled ? w : '—'}
+          </text>
+          <text y="7" textAnchor="middle" className="efb-mono"
+                fontSize="3" fill="var(--text-2)" letterSpacing="0.1em">{sublabel}</text>
         </g>
       )}
 
-      {/* Inline weight editor */}
-      {isEdit && (
-        <foreignObject x={editorBox.x} y={editorBox.y} width={editorBox.w} height={editorBox.h}
-                       onPointerDown={(e) => e.stopPropagation()}
-                       onClick={(e) => e.stopPropagation()}>
-          <input
-            xmlns="http://www.w3.org/1999/xhtml"
-            type="number"
-            inputMode="decimal"
-            autoFocus
-            value={draft}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => updateDraft(e.target.value)}
-            onBlur={() => onCommit()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  { e.preventDefault(); e.target.blur(); }
-              if (e.key === 'Escape') { e.preventDefault(); onCommit(); }
-            }}
-            style={{
-              width: '100%', height: '100%', boxSizing: 'border-box',
-              padding: 0, margin: 0,
-              background: 'transparent', border: 'none', outline: 'none',
-              textAlign: 'center', color: colors.text,
-              fontWeight: 500, fontFamily: 'var(--mono)',
-              fontSize: isStr ? '5.5px' : isBag ? '4.5px' : '5.5px',
-              MozAppearance: 'textfield',
-              WebkitAppearance: 'none',
-              appearance: 'textfield',
-            }}
-            onWheel={(e) => e.target.blur()}
-            className="no-spinner"
-          />
-        </foreignObject>
-      )}
-
-      {/* Inline name editor — below the chip; not for baggage (cargo has no name) */}
-      {isEdit && !isBag && (
-        <foreignObject x={isStr ? -22 : -24} y={isStr ? 56 : 14} width={isStr ? 44 : 48} height="12"
-                       onPointerDown={(e) => e.stopPropagation()}
-                       onClick={(e) => e.stopPropagation()}>
-          <input
-            xmlns="http://www.w3.org/1999/xhtml"
-            type="text"
-            value={item.name || ''}
-            placeholder="name"
-            onChange={(e) => onUpdateName(e.target.value)}
-            onBlur={() => onCommit()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  { e.preventDefault(); e.target.blur(); }
-              if (e.key === 'Escape') { e.preventDefault(); onCommit(); }
-            }}
-            style={{
-              width: '100%', boxSizing: 'border-box',
-              padding: '0 1px', margin: 0,
-              background: 'var(--bg-1)', border: '0.4px solid var(--border-strong)',
-              borderRadius: '1.5px', outline: 'none',
-              textAlign: 'center', color: 'var(--text-0)',
-              fontFamily: 'var(--mono)',
-              fontSize: '5px',
-            }}
-          />
-        </foreignObject>
-      )}
-
-      {/* Delete button — visible when the editor is open */}
-      {isEdit && (
-        <g transform={`translate(${badge.x},${badge.y})`}
-           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-           onPointerUp={(e) => { e.stopPropagation(); e.preventDefault(); onRemove(); }}
-           style={{ cursor: 'pointer' }}>
-          <circle r="5" fill="var(--alert)" stroke="var(--bg-0)" strokeWidth="0.6"/>
-          <path d="M -2 -2 L 2 2 M -2 2 L 2 -2"
-                stroke="#fff" strokeWidth="0.9" strokeLinecap="round"/>
-        </g>
-      )}
+      {/* isEdit visual signal — thicker stroke on the chip is set inline above via strokeWidth */}
     </g>
   );
 };
