@@ -1,61 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0a0e13">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>BK117 Weight &amp; Balance</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🚁</text></svg>">
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  html, body { margin: 0; padding: 0; background: #0a0e13; -webkit-text-size-adjust: 100%; font-family: ui-sans-serif, system-ui, sans-serif; }
-  #root { min-height: 100vh; }
-  svg { -webkit-touch-callout: none; }
-</style>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo, useRef } = React;
-
-const _Icon = (paths) => ({ size = 18, style, ...rest }) => (
-  React.createElement('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style, ...rest }, paths.map((d, i) => React.createElement('path', { key: i, d })))
-);
-const _IconRaw = (children) => ({ size = 18, style, ...rest }) => (
-  React.createElement('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style, ...rest }, children)
-);
-const Plus = _Icon(['M5 12h14', 'M12 5v14']);
-const X = _Icon(['M18 6 6 18', 'm6 6 12 12']);
-const Check = _Icon(['M20 6 9 17l-5-5']);
-const Trash2 = _IconRaw([
-  React.createElement('path', { key:0, d:'M3 6h18' }),
-  React.createElement('path', { key:1, d:'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
-  React.createElement('line', { key:2, x1:10, y1:11, x2:10, y2:17 }),
-  React.createElement('line', { key:3, x1:14, y1:11, x2:14, y2:17 }),
-]);
-const Edit3 = _IconRaw([
-  React.createElement('path', { key:0, d:'M12 20h9' }),
-  React.createElement('path', { key:1, d:'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' }),
-]);
-const Save = _IconRaw([
-  React.createElement('path', { key:0, d:'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z' }),
-  React.createElement('polyline', { key:1, points:'17 21 17 13 7 13 7 21' }),
-  React.createElement('polyline', { key:2, points:'7 3 7 8 15 8' }),
-]);
-const Copy = _IconRaw([
-  React.createElement('rect', { key:0, x:9, y:9, width:13, height:13, rx:2, ry:2 }),
-  React.createElement('path', { key:1, d:'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }),
-]);
-const AlertTriangle = _IconRaw([
-  React.createElement('path', { key:0, d:'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' }),
-  React.createElement('line', { key:1, x1:12, y1:9, x2:12, y2:13 }),
-  React.createElement('line', { key:2, x1:12, y1:17, x2:12.01, y2:17 }),
-]);
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Trash2, Edit3, Save, X, Plane, AlertTriangle, Check, Copy } from 'lucide-react';
 
 // Helicopter icon (top-down) — lucide has no helicopter, so this is custom.
 const Helicopter = ({ size = 20, style }) => (
@@ -364,8 +308,8 @@ const DEFAULT_FLEET = [
 // Storage
 const SKEY_FLEET = 'bk117v2_fleet';
 const SKEY_FLIGHT = 'bk117v2_flight';
-const load = async (k, fb) => { try { const r = localStorage.getItem(k); if (r) return JSON.parse(r); } catch {} return fb; };
-const save = async (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const load = async (k, fb) => { try { const r = await window.storage.get(k); if (r?.value) return JSON.parse(r.value); } catch {} return fb; };
+const save = async (k, v) => { try { await window.storage.set(k, JSON.stringify(v)); } catch {} };
 
 // ============================================================
 // ICONS
@@ -2393,7 +2337,7 @@ const FleetView = ({ fleet, setFleet, activeId, setActiveId }) => {
 // MAIN APP
 // ============================================================
 
-function App() {
+export default function App() {
   const [view, setView] = useState('load');
   const [fleet, setFleet] = useState(DEFAULT_FLEET);
   const [activeId, setActiveId] = useState(DEFAULT_FLEET[0].id);
@@ -3463,8 +3407,3 @@ function App() {
     </div>
   );
 }
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-</script>
-</body>
-</html>
