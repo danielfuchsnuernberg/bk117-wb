@@ -60,7 +60,7 @@ const AlertTriangle = _IconRaw([
 // Version — bumped whenever a new build is deployed. Shown in the footer so
 // the user can verify at a glance which build they're looking at. Bump this
 // on every user-facing release.
-const VERSION = 'v08';
+const VERSION = 'v09';
 
 // Helicopter icon (top-down) — lucide has no helicopter, so this is custom.
 const Helicopter = ({ size = 20, style }) => (
@@ -731,7 +731,17 @@ const Cabin = ({ flight, setFlight, cfg }) => {
   const onMove = (e) => {
     const pend = pending.current;
     const curDragId = dragIdRef.current;
-    if (!pend && !curDragId) return;
+
+    // Bail early on stray pointermoves:
+    //   - No active drag AND no fresh pending → nothing to do.
+    //   - No active drag AND pending was already used (moved=true) → this is
+    //     a mouse move that happened AFTER a drop; without this guard,
+    //     window-level pointermove would keep moving the item because
+    //     pending.current still exists (kept alive so the follow-up click
+    //     event can be recognised as a drag-completion, not a tap).
+    if (!curDragId && !pend) return;
+    if (!curDragId && pend.moved) return;
+
     e.preventDefault();
     const pt = toSvgPt(e.clientX, e.clientY);
 
