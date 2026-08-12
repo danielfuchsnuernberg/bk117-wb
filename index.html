@@ -57,6 +57,11 @@ const AlertTriangle = _IconRaw([
   React.createElement('line', { key:2, x1:12, y1:17, x2:12.01, y2:17 }),
 ]);
 
+// Version — bumped whenever a new build is deployed. Shown in the footer so
+// the user can verify at a glance which build they're looking at. Bump this
+// on every user-facing release.
+const VERSION = 'v08';
+
 // Helicopter icon (top-down) — lucide has no helicopter, so this is custom.
 const Helicopter = ({ size = 20, style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -594,9 +599,20 @@ const findFreeSlot = (type, placed, cfg) => {
 
 const Cabin = ({ flight, setFlight, cfg }) => {
   const svgRef = useRef(null);
-  const [dragId, setDragId] = useState(null);
+  // dragId is mirrored to a ref. Rationale: event handlers attached at mount
+  // (window pointermove/up) capture React state by closure. When we call
+  // setDragId(id), React schedules a re-render but the closure the handler
+  // *just captured* still sees the OLD dragId — so a fast release right
+  // after a fast move can hit onUp with dragId=null in its closure and
+  // wrongly take the "tap" path, leaving the drag state stuck (the seat
+  // keeps following the pointer). Reading dragIdRef.current instead of the
+  // state variable inside handlers guarantees they see the latest value.
+  const [dragId, setDragIdState] = useState(null);
+  const dragIdRef = useRef(null);
+  const setDragId = (v) => { dragIdRef.current = v; setDragIdState(v); };
   const [editId, setEditId] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [hoverSlot, setHoverSlot] = useState(null);
   const pending = useRef(null);
 
@@ -714,19 +730,21 @@ const Cabin = ({ flight, setFlight, cfg }) => {
 
   const onMove = (e) => {
     const pend = pending.current;
-    if (!pend && !dragId) return;
+    const curDragId = dragIdRef.current;
+    if (!pend && !curDragId) return;
     e.preventDefault();
     const pt = toSvgPt(e.clientX, e.clientY);
 
     // Promote a pending interaction to a real drag once it moves past threshold.
-    if (pend && !dragId) {
+    if (pend && !curDragId) {
       const item = placed.find(p => p.id === pend.id);
       if (!item) return;
       const dist = Math.hypot((pt.x - pend.offsetX) - item.x, (pt.y - pend.offsetY) - item.y);
       if (dist > 3) {
         // Began dragging — close any editor and start the drag
         if (editId) setEditId(null);
-        setDragOffset({ x: pend.offsetX, y: pend.offsetY });
+        dragOffsetRef.current = { x: pend.offsetX, y: pend.offsetY };
+        setDragOffset(dragOffsetRef.current);
         setDragId(pend.id);
         pend.moved = true;
       } else {
@@ -734,10 +752,11 @@ const Cabin = ({ flight, setFlight, cfg }) => {
       }
     }
 
-    if (!dragId && !(pend && pend.moved)) return;
-    const activeId = dragId || pend.id;
-    const ox = dragId ? dragOffset.x : pend.offsetX;
-    const oy = dragId ? dragOffset.y : pend.offsetY;
+    const nowDragging = dragIdRef.current;
+    if (!nowDragging && !(pend && pend.moved)) return;
+    const activeId = nowDragging || pend.id;
+    const ox = nowDragging ? dragOffsetRef.current.x : pend.offsetX;
+    const oy = nowDragging ? dragOffsetRef.current.y : pend.offsetY;
     const nx = Math.max(60, Math.min(140, pt.x - ox));
     const ny = Math.max(40, Math.min(280, pt.y - oy));
     update(activeId, { x: nx, y: ny });
@@ -747,29 +766,30 @@ const Cabin = ({ flight, setFlight, cfg }) => {
 
   const onUp = (e) => {
     const pend = pending.current;
-    // Case 1: this was a drag — snap to nearest slot
-    if (dragId) {
-      e.preventDefault();
-      const item = placed.find(p => p.id === dragId);
+    const curDragId = dragIdRef.current;
+    // Case 1: this was a drag — snap to nearest slot.
+    // Use dragIdRef (always current) OR pend.moved (also a ref, always
+    // current) to detect a drag. Either signal being true means "this was
+    // NOT a tap" — the click handler on the placed <g> will see pend.moved
+    // and skip opening the editor.
+    if (curDragId || (pend && pend.moved)) {
+      if (e && e.preventDefault) e.preventDefault();
+      const targetId = curDragId || pend?.id;
+      const item = placed.find(p => p.id === targetId);
       if (item) {
         const slotId = nearestSlot(item, item.x, item.y);
         if (slotId) {
           const s = SLOTS_C[slotId];
-          update(dragId, { x: s.x, y: s.y, slotId });
+          update(targetId, { x: s.x, y: s.y, slotId });
         }
       }
       setDragId(null);
       setHoverSlot(null);
-      // Mark pending as "moved" so the follow-up click doesn't open the editor
-      if (pend) pend.moved = true;
-      // Note: we intentionally do NOT clear pending.current here — the browser
-      // will fire a click event next, and onClick uses pending to decide
-      // whether the click was actually a drag-completion (ignore) or a tap.
+      if (pend) pend.moved = true; // ensure onClick skips
       return;
     }
     // Case 2: this was a tap — do nothing here. onClick on the placed item's
-    // <g> handles toggling the editor. Doing it here would double-fire with
-    // onClick in browsers where both flow through.
+    // <g> handles toggling the editor.
   };
 
   // === Window-level pointer listeners ===
@@ -941,7 +961,7 @@ const Cabin = ({ flight, setFlight, cfg }) => {
                         // Fallback tap handler — if the pointerup-based tap
                         // detection missed (e.g. pointer capture didn't stick),
                         // a plain click still toggles the editor.
-                        if (dragId) return;
+                        if (dragIdRef.current) return;
                         if (pending.current && pending.current.moved) return;
                         setEditId(prev => prev === item.id ? null : item.id);
                         pending.current = null;
@@ -3411,7 +3431,10 @@ function App() {
 
         {/* Standing disclaimer (style-guide §6) */}
         <div className="efb-fine" style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)', maxWidth: '720px' }}>
-          <div className="efb-caps-sm" style={{ marginBottom: '4px' }}>Disclaimer</div>
+          <div className="flex items-baseline justify-between" style={{ marginBottom: '4px', gap: '12px' }}>
+            <span className="efb-caps-sm">Disclaimer</span>
+            <span className="efb-mono" style={{ color: 'var(--text-3)', fontSize: '10px', letterSpacing: '0.08em' }}>BK117 W&amp;B · {VERSION}</span>
+          </div>
           Planning aid only. All loadings, arms, and CG envelopes must be verified
           against the approved BK117 B-2 Flight Manual (Section 6 — Weight &amp; Balance) before flight.
           Provisional or reconstructed data is flagged with the <span style={{ color: 'var(--path)' }}>Approx</span> badge
