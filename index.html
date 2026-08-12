@@ -772,6 +772,31 @@ const Cabin = ({ flight, setFlight, cfg }) => {
     // onClick in browsers where both flow through.
   };
 
+  // === Window-level pointer listeners ===
+  // Without pointer capture, if the pointer leaves the SVG mid-drag (fast
+  // moves, cursor going off-screen, etc.), the SVG's onPointerUp handler
+  // never fires — and the seat "sticks" to the cursor because dragId is
+  // never cleared. Attaching move/up handlers to the window catches the
+  // release regardless of where the pointer ends up. The handlers use refs
+  // so they always call the CURRENT onMove/onUp (which capture the current
+  // React state), not stale closures from the mount.
+  const onMoveRef = useRef(onMove);
+  const onUpRef = useRef(onUp);
+  onMoveRef.current = onMove;
+  onUpRef.current = onUp;
+  useEffect(() => {
+    const gm = (e) => onMoveRef.current(e);
+    const gu = (e) => onUpRef.current(e);
+    window.addEventListener('pointermove', gm);
+    window.addEventListener('pointerup', gu);
+    window.addEventListener('pointercancel', gu);
+    return () => {
+      window.removeEventListener('pointermove', gm);
+      window.removeEventListener('pointerup', gu);
+      window.removeEventListener('pointercancel', gu);
+    };
+  }, []);
+
   const draggingItem = placed.find(p => p.id === dragId);
 
   // Close inline editor when clicking outside the cabin
@@ -794,7 +819,6 @@ const Cabin = ({ flight, setFlight, cfg }) => {
   return (
     <div ref={containerRef} className="relative w-full mx-auto select-none" style={{ maxWidth: '380px', touchAction: 'none' }}>
       <svg ref={svgRef} viewBox="0 0 200 290" className="w-full h-auto" style={{ touchAction: 'none' }}
-           onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
            onClick={(e) => {
              // Tapping empty SVG area closes the editor
              if (editId && e.target.tagName === 'svg') setEditId(null);
@@ -1245,7 +1269,7 @@ const AircraftPicker = ({ fleet, activeId, setActiveId }) => {
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(o => !o)} className="efb-input cursor-pointer flex items-center gap-2"
+      <button onClick={() => setOpen(o => !o)} className="efb-btn cursor-pointer flex items-center gap-2"
         style={{ paddingRight: '28px', position: 'relative', letterSpacing: '0.05em' }}>
         <span style={{ color: 'var(--text-0)' }}>{active?.tail}</span>
         <span style={{ color: 'var(--text-2)' }}>— {active?.variant}</span>
@@ -3161,7 +3185,6 @@ function App() {
       <div className="sticky top-0 z-30" style={{ background: 'var(--bg-0)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <Helicopter size={20} style={{ color: 'var(--text-2)' }}/>
             <AircraftPicker fleet={fleet} activeId={activeId} setActiveId={setActiveId}/>
           </div>
           <div className="flex items-center gap-3">
