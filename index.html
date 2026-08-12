@@ -60,7 +60,7 @@ const AlertTriangle = _IconRaw([
 // Version — bumped whenever a new build is deployed. Shown in the footer so
 // the user can verify at a glance which build they're looking at. Bump this
 // on every user-facing release.
-const VERSION = 'v09';
+const VERSION = 'v11';
 
 // Helicopter icon (top-down) — lucide has no helicopter, so this is custom.
 const Helicopter = ({ size = 20, style }) => (
@@ -1299,8 +1299,16 @@ const AircraftPicker = ({ fleet, activeId, setActiveId }) => {
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(o => !o)} className="efb-btn cursor-pointer flex items-center gap-2"
-        style={{ paddingRight: '28px', position: 'relative', letterSpacing: '0.05em' }}>
+      <button onClick={() => setOpen(o => !o)} className="efb-btn cursor-pointer flex items-center gap-1.5"
+        style={{
+          paddingRight: '28px',
+          position: 'relative',
+          letterSpacing: '0.08em',
+          fontSize: '11px',
+          lineHeight: 1.2,
+          height: '32px',
+          boxSizing: 'border-box',
+        }}>
         <span style={{ color: 'var(--text-0)' }}>{active?.tail}</span>
         <span style={{ color: 'var(--text-2)' }}>— {active?.variant}</span>
         <span style={{
@@ -3220,9 +3228,10 @@ function App() {
           <div className="flex items-center gap-3">
             <button onClick={() => { try { printLoadSheet().catch(e => { console.error(e); alert('Export failed: ' + (e?.message || e)); }); } catch (e) { console.error(e); alert('Export failed: ' + (e?.message || e)); } }}
               className="efb-btn flex items-center gap-1.5"
+              style={{ fontSize: '11px', lineHeight: 1.2, height: '32px', boxSizing: 'border-box' }}
               title="Export / print load sheet as PDF">
               <Save size={13}/>
-              <span className="efb-caps-sm" style={{ letterSpacing: '0.08em' }}>Export PDF</span>
+              <span style={{ letterSpacing: '0.08em' }}>Export PDF</span>
             </button>
             <div className="text-right">
               <div className="efb-mono" style={{
@@ -3412,11 +3421,27 @@ function App() {
 
               {(flight.placed || []).length > 0 && (
                 <button onClick={clearAll}
-                  className="w-full py-2 efb-caps efb-btn-danger transition-colors"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--alert)'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-3)'}>
-                  Clear All Items
+                  className="efb-panel flex items-center justify-center gap-2 transition-colors"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--bg-1)',
+                    border: '1px solid var(--border-strong)',
+                    color: 'var(--text-2)',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--alert-bg)';
+                    e.currentTarget.style.color = 'var(--alert)';
+                    e.currentTarget.style.borderColor = 'var(--alert)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-1)';
+                    e.currentTarget.style.color = 'var(--text-2)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  }}>
+                  <Trash2 size={14}/>
+                  <span className="efb-caps">Clear All Items</span>
                 </button>
               )}
             </div>
